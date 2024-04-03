@@ -1,0 +1,313 @@
+---
+pdf_document: default
+author: "Rita Miller"
+date: "04/03/2024"
+output:
+  word_document: default
+  pdf_document: default
+html_document:
+  self_contained: false
+title: "Predicting Loan Status - Exploratory Data Analysis"
+fontsize: 12pt
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Load Packages  
+```{r message=FALSE, warning=FALSE}
+library(tidyverse)
+library(e1071)
+```
+## Load Data
+```{r echo=TRUE}
+dataset <- read.csv("loans50k.csv")
+```
+```{r}
+#Explore Data
+head(df) #view first 6 rows
+#summary(df) #summary of data set
+#dim(df) #dimensions 50k rows 32 cols
+#View(df)#quick view of the entire data set
+```
+
+## Introduction
+The purpose of this study is to predict which customer is more likely to default on their banking loan. The dataframe has 50,000 observations and 32 variables with 7,581 loans in bad status and 2,7074 in good status. In this investigation, we will prepare, clean, explore, and transform the data. Variables related to good and bad loans will be included, while variables that are not useful as predictors will be excluded.  
+
+## Preparing and Cleaning Data
+
+We will keep loans that were fully paid, charged off and default in our data. 
+```{r echo=FALSE}
+dataset <- dataset %>% 
+  filter(status %in% c('Charged Off','Fully Paid', 'Default'))
+
+#double check
+dataset$status %>% unique()
+
+#initially there were 50,000 observations
+#check now:
+dim(dataset)
+
+##we need to create a new status
+
+dataset <- dataset %>% 
+  mutate(status_new = if_else(status == 'Fully Paid', 'Good', 'Bad'))
+
+dataset$status_new = factor(dataset$status_new, levels = unique(dataset$status_new)) 
+
+class(dataset$status_new)
+
+```
+### Variable elimination
+We will remove the variables LoanID and employment as they are irrelevant.
+```{r echo=FALSE}
+dataset <- dataset %>% 
+  select(-loanID, -employment)
+```
+### Feature engineering and NA values
+```{r include=FALSE}
+summary(dataset)
+```
+Looking at the dataset we see a well distributed dataset, so feature engineering is unnecessary.
+
+```{r include=FALSE}
+#are there any NA - missing values?
+any(is.na(dataset))
+
+#NA's occur in bcOpen and bcRatio and revolRatio, we will replace these values by the mean. Keep in mind that when we disregard cases with any missing variables, we may lose useful information that the non-missing values in that case may convey. Therefore, we may impute reasonable values (those that will not skew the results of analyses very much) for the missing values and that is the reason for replacing Na's with the mean.
+
+dataset <- dataset %>% 
+  mutate(bcOpen = ifelse(is.na(bcOpen), mean(bcOpen,na.rm = T), bcOpen)) %>% 
+      mutate(bcRatio  = ifelse(is.na(bcRatio), mean(bcRatio,na.rm = T), bcRatio)   )     %>% 
+        mutate(revolRatio  = ifelse(is.na(revolRatio), mean(revolRatio,na.rm = T), revolRatio)   )    
+
+any(is.na(dataset))
+```
+## Exploring and Transforming the Data
+The following charts show the distributions of some of the quantitative predictor variables, to see if if the variables are distributed differently for good and bad loans. 
+```{r echo=FALSE}
+#quantitative predictor variables: amount, payment, income, totalPaid, totalBal, totalRevLim, AccOpen24, avgBal, totalLim
+
+#make a side-by-side boxplot of a quantitative variable to see if the variable is distributed differently for good and bad loans (status_new)
+```
+```{r echo=FALSE}
+p1 <- ggplot(dataset, aes(x=status_new, y=amount)) + 
+  geom_boxplot()+labs(x = "",
+                      y="amount", title = "Loan Status")
+p1
+```
+```{r include=FALSE}
+amount=dataset$amount #verification of skewness
+skewness(amount)#skewness 0.5 to 1 is moderately skewed
+```
+The distribution of good and bad loans are moderately skewed to the right with no apparent outliers. Will replace this predictor in the data frame with transformed values using logarithms.
+
+```{r include=FALSE}
+dataset$amount=log(dataset$amount)
+head(dataset$amount)
+p1 <- ggplot(dataset, aes(x=status_new, y=amount)) + 
+  geom_boxplot()+labs(x = "",
+                      y="amount", title = "Loan Status")
+p1 #view skew reduction
+```
+
+```{r echo=FALSE}
+p2 <- ggplot(dataset, aes(x=status_new, y=payment)) + 
+  geom_boxplot()+labs(x = "",
+                      y="payment", title = "Loan Status")
+p2
+```
+```{r include=FALSE}
+payment=dataset$payment #verification of skewness
+skewness(payment) #skewness 0.5 to 1 is moderately skewed
+```
+The distribution of good and bad loans are moderately skewed to the right and some outliers are apparent. Will replace this predictor in the data frame with transformed values using logarithms.
+
+```{r include=FALSE}
+dataset$payment=log(dataset$payment)
+head(dataset$payment)
+p2 <- ggplot(dataset, aes(x=status_new, y=payment)) + 
+  geom_boxplot()+labs(x = "",
+                      y="payment", title = "Loan Status")
+p2 #view skew reduction
+```
+
+```{r echo=FALSE}
+p3 <- ggplot(dataset, aes(x=status_new, y=income)) + 
+  geom_boxplot()+labs(x = "",
+                      y="income", title = "Loan Status")
+p3
+```
+```{r include=FALSE}
+income=dataset$income #verification of skewness
+skewness(income)#skewness less than -1 or greater than 1 are highly skewed
+```
+
+The distribution of good and bad loans are strongly skewed to the right with outliers. Will replace this predictor in the data frame with transformed values using logarithms.
+
+```{r include=FALSE}
+dataset$income=log(dataset$income)
+head(dataset$income)
+p3 <- ggplot(dataset, aes(x=status_new, y=income)) + 
+  geom_boxplot()+labs(x = "",
+                      y="income", title = "Loan Status")
+p3#view skew reduction
+
+```
+
+```{r echo=FALSE}
+p4 <- ggplot(dataset, aes(x=status_new, y=totalPaid)) + 
+  geom_boxplot()+labs(x = "",
+                      y="totalPaid", title = "Loan Status")
+p4
+```
+```{r include=FALSE}
+totalPaid=dataset$totalPaid #verification of skewness
+skewness(totalPaid)#skewness less than -1 or greater than 1 are highly skewed
+```
+The distribution of good and bad loans are strongly skewed to the right with outliers. Will replace this predictor in the data frame with transformed values using logarithms.
+
+```{r include=FALSE}
+dataset$totalPaid=log(dataset$totalPaid)
+head(dataset$totalPaid)
+p4 <- ggplot(dataset, aes(x=status_new, y=totalPaid)) + 
+  geom_boxplot()+labs(x = "",
+                      y="totalPaid", title = "Loan Status")
+p4#view skew reduction
+
+```
+
+```{r echo=FALSE}
+p5 <- ggplot(dataset, aes(x=status_new, y=totalBal)) + 
+  geom_boxplot()+labs(x = "",
+                      y="totalBal", title = "Loan Status")
+p5
+```
+```{r include=FALSE}
+totalBal=dataset$totalBal #verification of skewness
+skewness(totalBal)#skewness less than -1 or greater than 1 are highly skewed
+```
+The distribution of good and bad loans are strongly skewed to the right with outliers. Will replace this predictor in the data frame with transformed values using logarithms.
+
+```{r include=FALSE}
+dataset$totalBal=log(dataset$totalBal) 
+head(dataset$totalBal)
+p5 <- ggplot(dataset, aes(x=status_new, y=totalBal)) + 
+  geom_boxplot()+labs(x = "",
+                      y="totalBal", title = "Loan Status")
+p5 #view skew reduction
+```
+
+```{r echo=FALSE}
+p6 <- ggplot(dataset, aes(x=status_new, y=avgBal)) + 
+  geom_boxplot()+labs(x = "",
+                      y="avgBal", title = "Loan Status")
+p6
+```
+```{r include=FALSE}
+avgBal=dataset$avgBal #verification of skewness
+skewness(avgBal)#skewness less than -1 or greater than 1 are highly skewed
+```
+The distribution of good and bad loans are strongly skewed to the right with outliers. Will replace this predictor in the data frame with transformed values using logarithms.
+
+```{r include=FALSE}
+dataset$avgBal=log(dataset$avgBal) 
+head(dataset$avgBal)
+p6 <- ggplot(dataset, aes(x=status_new, y=avgBal)) + 
+  geom_boxplot()+labs(x = "",
+                      y="avgBal", title = "Loan Status")
+p6 #view skew reduction
+```
+
+```{r echo=FALSE}
+p7 <- ggplot(dataset, aes(x=status_new, y=totalLim)) + 
+  geom_boxplot()+labs(x = "",
+                      y="totalLim", title = "Loan Status")
+p7 
+```
+```{r include=FALSE}
+totalLim=dataset$totalLim #verification of skewness
+skewness(totalLim)#skewness less than -1 or greater than 1 are highly skewed
+```
+The distribution of good and bad loans are strongly skewed to the right with outliers. Will replace this predictor in the data frame with transformed values using logarithms.
+
+```{r include=FALSE}
+dataset$totalLim=log(dataset$totalLim)
+head(dataset$totalLim)
+p7 <- ggplot(dataset, aes(x=status_new, y=totalLim)) + 
+  geom_boxplot()+labs(x = "",
+                      y="totalLim", title = "Loan Status")
+p7 #view skew reduction
+```
+
+```{r echo=FALSE}
+#use bar graphs or tables to show how the category distribution varies for good and bad loans (status_new)
+
+#qualitative predictor variables: term, length, home, grade, verified, status, reason, state
+
+# Grouped Bar Plot
+catV <- table(dataset$status_new, dataset$term) #categorical var
+barplot(catV, main="Loans",
+  xlab="status_new", ylab = "Term",col=c("red","green"),
+  legend = rownames(catV), beside=TRUE)
+```
+The distribution of the term for most loans were in good status at 36 months.  
+
+```{r echo=FALSE}
+catV <- table(dataset$status_new, dataset$length)  
+barplot(catV, main="Loans",
+  xlab="status_new", ylab = "Length",col=c("red","green"),
+  legend = rownames(catV), beside=TRUE)
+```
+The distribution of the length of loans were approximately 2 years and most were in good status. 
+```{r echo=FALSE}
+catV <- table(dataset$status_new, dataset$home) 
+barplot(catV, main="Loans",
+  xlab="status_new", ylab = "Home",col=c("red","green"),
+  legend = rownames(catV), beside=TRUE)
+```
+The distribution of home loans were mostly for mortgages and most were in good status. 
+```{r echo=FALSE}
+catV <- table(dataset$status_new, dataset$grade) 
+barplot(catV, main="Loans",
+  xlab="status_new", ylab = "Grade",col=c("red","green"),
+  legend = rownames(catV), beside=TRUE)
+```
+The distribution of the grade for most loans was a B and most were in good status. 
+
+```{r echo=FALSE}
+dataset$verified <- as.character(dataset$verified)#closer look
+
+catV <- table(dataset$status_new, dataset$verified) 
+barplot(catV, main="Loans",
+  xlab="status_new", ylab = "Verified",col=c("red","green"),
+  legend = rownames(catV), beside=TRUE)
+
+```
+The distribution of verified for most loans was Source Verified and most were in good status. 
+
+```{r echo=FALSE}
+catV <- table(dataset$status_new, dataset$status) 
+barplot(catV, main="Loans",
+  xlab="status_new", ylab = "Status",col=c("red","green"),
+  legend = rownames(catV), beside=TRUE)
+```
+The distribution of the status of loans were fully paid and in good status. 
+
+```{r echo=FALSE}
+dataset$reason <- as.character(dataset$reason)#closer look
+
+catV <- table(dataset$status_new, dataset$reason) 
+barplot(catV, main="Loans",
+  xlab="status_new", ylab = "Reason",col=c("red","green"),
+  legend = rownames(catV), beside=TRUE)
+```
+The distribution of the reason for loans appears to be mostly for home improvement and most were in good status.
+
+```{r echo=FALSE}
+catV <- table(dataset$status_new, dataset$state) 
+barplot(catV, main="Loans",
+  xlab="status_new", ylab = "State",col=c("red","green"),
+  legend = rownames(catV), beside=TRUE)
+```
+The largest distribution of loans by state were in Arizona and most were in good standing.
